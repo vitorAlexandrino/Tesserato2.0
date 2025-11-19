@@ -1,0 +1,32 @@
+# ---------------------------------
+# Arquivos e Pastas de Ambiente Python
+# ---------------------------------
+# Ignora ambientes virtuais
+venv/
+.venv/
+
+# Ignora cache de Python
+__pycache__/
+*.pyc
+
+# Ignora dependencias (se voce tiver pacotes instalados diretamente aqui)
+Lib/site-packages/
+
+# ---------------------------------
+# Arquivos de Build/Compilacao (PyInstaller)
+# ---------------------------------
+# Pastas de saida do PyInstaller e arquivos temporarios
+build/
+dist/
+*.spec
+
+# Ignora arquivos de log e temporarios
+*.log
+*.tmp
+
+# ---------------------------------
+# Arquivos Grandes (Que causaram os avisos)
+# ---------------------------------
+# Ignora executaveis e pacotes de instalacao (se estes nao forem o codigo-fonte)
+*.exe
+*.pkg
