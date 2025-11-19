@@ -1,0 +1,29 @@
+﻿Instituto de Aplicações Operacionais (IAOp)
+Licença de Software Restrita
+
+Este acordo de licença de software ("Contrato") é celebrado entre IAOp ("Licenciante") e o usuário final ("Licenciado"). Ao instalar, copiar, fazer download ou utilizar o software fornecido pela Licenciante, o Licenciado concorda em cumprir os termos deste Contrato.
+
+Concessão de Licença:
+A Licenciante concede ao Licenciado uma licença pessoal, não exclusiva e intransferível para usar o Software estritamente para fins internos, sujeito aos termos e condições aqui estabelecidos. Esta licença não permite ao Licenciado o direito de usar, copiar, modificar, mesclar, publicar, distribuir, sublicenciar e/ou vender cópias do Software.
+
+Restrições:
+O Licenciado não pode realizar as seguintes ações relacionadas ao Software, nem permitir que terceiros as realizem:
+
+a) Usar o Software além do escopo da licença concedida;
+b) Copiar, reproduzir ou distribuir o Software, total ou parcialmente;
+c) Modificar, adaptar, traduzir ou criar trabalhos derivados do Software;
+d) Mesclar o Software com outros programas de software;
+e) Publicar, disponibilizar ou divulgar o Software, de qualquer forma ou meio, sem a autorização por escrito da Licenciante;
+f) Transferir, sublicenciar, vender, alugar ou emprestar o Software a terceiros.
+
+Propriedade Intelectual:
+O Licenciado reconhece que o Software é protegido por direitos autorais e outras leis de propriedade intelectual. A Licenciante retém todos os direitos, título e interesse sobre o Software, incluindo quaisquer melhorias, atualizações ou modificações realizadas pela Licenciante. Nada neste Contrato será interpretado como uma transferência de tais direitos ao Licenciado.
+
+Isenção de Responsabilidade:
+O Software é fornecido "no estado em que se encontra", sem quaisquer garantias ou condições, expressas ou implícitas. A Licenciante não se responsabiliza por quaisquer danos diretos, indiretos, incidentais, consequenciais, especiais ou punitivos decorrentes do uso ou da impossibilidade de uso do Software, mesmo que a Licenciante tenha sido informada sobre a possibilidade de tais danos.
+
+Rescisão:
+Este Contrato será rescindido automaticamente, sem aviso prévio, se o Licenciado violar qualquer uma das cláusulas aqui estabelecidas. Após a rescisão, o Licenciado deverá cessar imediatamente o uso do Software e destruir todas as cópias do mesmo em sua posse.
+
+Disposições Gerais:
+Este Contrato constitui o acordo integral entre a Licenciante e o Licenciado, substituindo quaisquer acordos anteriores ou contemporâneos, escritos ou orais, relacionados ao Software. Este Contrato será regido e interpretado de acordo com as leis do Brasil, excluindo-se seus conflitos de disposições legais. Qualquer litígio decorrente deste Contrato será submetido à jurisdição exclusiva dos tribunais competentes.
