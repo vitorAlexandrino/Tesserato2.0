@@ -15,13 +15,27 @@ import os
 ############################################################################################
 
 # #https://stackoverflow.com/questions/31836104/pyinstaller-and-onefile-how-to-include-an-image-in-the-exe-file
+# def resource_path(relative_path):
+#     """ Get absolute path to resource, works for dev and for PyInstaller """
+#     try:
+#         # PyInstaller creates a temp folder and stores path in _MEIPASS
+#         base_path = sys._MEIPASS2 #LEMBRAR DE ACRESCENTAR ESSE 2 NO FINLA
+#     except Exception:
+#         base_path = os.path.abspath(".")
+
+#     return os.path.join(base_path, relative_path)
+
+# Arquivos: SplashScreen_ui.py e menu_ui_ui.py
+
+####Função dada pelo gemini
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS2 #LEMBRAR DE ACRESCENTAR ESSE 2 NO FINLA
+        base_path = sys._MEIPASS2 # LEMBRAR DE ACRESCENTAR ESSE 2 NO FINLA
     except Exception:
-        base_path = os.path.abspath(".")
+        # CORREÇÃO AQUI: Usa o diretório onde o arquivo de CÓDIGO está como caminho base.
+        base_path = os.path.dirname(os.path.abspath(__file__))
 
     return os.path.join(base_path, relative_path)
 
@@ -54,7 +68,7 @@ class Ui_SplashScreen(object):
         self.label = QtWidgets.QLabel(parent=self.widget1)
         self.label.setGeometry(QtCore.QRect(9, 9, 180, 219))
         self.label.setText("")
-        self.label.setPixmap(QtGui.QPixmap(resource_path("TESSERATO\iaop.png")))
+        self.label.setPixmap(QtGui.QPixmap(resource_path("iaop.png")))
         self.label.setObjectName("label")
         self.verticalLayout_2.addWidget(self.widget1)
         self.progressBar = QtWidgets.QProgressBar(parent=self.widget)

@@ -13,22 +13,36 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 ############################################################################################
 
 #https://stackoverflow.com/questions/31836104/pyinstaller-and-onefile-how-to-include-an-image-in-the-exe-file
+# def resource_path(relative_path):
+#     """ Get absolute path to resource, works for dev and for PyInstaller """
+#     try:
+#         # PyInstaller creates a temp folder and stores path in _MEIPASS
+#         base_path = sys._MEIPASS2 #LEMBRAR DE ACRESCENTAR ESSE 2 NO FINLA
+#     except Exception:
+#         base_path = os.path.abspath(".")
+
+#     return os.path.join(base_path, relative_path)
+
+# Arquivos: SplashScreen_ui.py e menu_ui_ui.py
+
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS2 #LEMBRAR DE ACRESCENTAR ESSE 2 NO FINLA
+        base_path = sys._MEIPASS2 # LEMBRAR DE ACRESCENTAR ESSE 2 NO FINLA
     except Exception:
-        base_path = os.path.abspath(".")
+        # CORREÇÃO AQUI: Usa o diretório onde o arquivo de CÓDIGO está como caminho base.
+        base_path = os.path.dirname(os.path.abspath(__file__))
 
     return os.path.join(base_path, relative_path)
+
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1315, 902)
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap(resource_path("TESSERATO\logodix.ico")), QtGui.QIcon.Mode.Normal, QtGui.QIcon.State.Off)
+        icon.addPixmap(QtGui.QPixmap(resource_path("logodix.ico")), QtGui.QIcon.Mode.Normal, QtGui.QIcon.State.Off)
         MainWindow.setWindowIcon(icon)
         MainWindow.setDocumentMode(False)
         self.centralwidget = QtWidgets.QWidget(parent=MainWindow)
@@ -48,7 +62,7 @@ class Ui_MainWindow(object):
         self.DOM_COMPREP.setMaximumSize(QtCore.QSize(90, 110))
         self.DOM_COMPREP.setStyleSheet("")
         self.DOM_COMPREP.setText("")
-        self.DOM_COMPREP.setPixmap(QtGui.QPixmap(resource_path("TESSERATO\COMPREP1.png")))
+        self.DOM_COMPREP.setPixmap(QtGui.QPixmap(resource_path("COMPREP1.png")))
         self.DOM_COMPREP.setScaledContents(True)
         self.DOM_COMPREP.setObjectName("DOM_COMPREP")
         self.horizontalLayout.addWidget(self.DOM_COMPREP)
@@ -88,7 +102,7 @@ class Ui_MainWindow(object):
         self.DOM_IAOp.setMaximumSize(QtCore.QSize(90, 110))
         self.DOM_IAOp.setStyleSheet("")
         self.DOM_IAOp.setText("")
-        self.DOM_IAOp.setPixmap(QtGui.QPixmap(resource_path("TESSERATO\imagens\iaop.png")))
+        self.DOM_IAOp.setPixmap(QtGui.QPixmap(resource_path("imagens\iaop.png")))
         self.DOM_IAOp.setScaledContents(True)
         self.DOM_IAOp.setObjectName("DOM_IAOp")
         self.horizontalLayout.addWidget(self.DOM_IAOp)
