@@ -220,7 +220,7 @@ class Ui_SplashScreen(object):
         self.progressBar.setPalette(palette)
         self.progressBar.setStyleSheet("background-color: rgb(99, 109, 255);")
         self.progressBar.setMinimum(0)
-        self.progressBar.setProperty("value", 9)
+        self.progressBar.setProperty("value", 2)
         self.progressBar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.progressBar.setObjectName("progressBar")
         self.verticalLayout_2.addWidget(self.progressBar)
