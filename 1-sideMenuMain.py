@@ -193,7 +193,7 @@ class UI(QMainWindow):
         if status_painel == "carregado":
             linha_alterada = linha
             coluna_alterada = coluna
-            if coluna_alterada == 11:
+            if coluna_alterada == 12:
                 df_plamov_compilado.loc[linha_alterada, "PLAMOV"] = self.ui.tableWidget.item(linha_alterada, coluna_alterada).text()   
             
     #passar as páginas
@@ -250,54 +250,51 @@ class UI(QMainWindow):
             # ==============================================================================
             # LÓGICA BMA (CRUZAMENTO PLAMOV + TP BMA)
             # ==============================================================================
+# ==============================================================================
+            # LÓGICA BMA (CRUZAMENTO PLAMOV + TP BMA)
+            # ==============================================================================
             if especialidade == "BMA":
-                # 1. BUSCA A VAGA NA TP BMA (Para saber a capacidade/meta)
-                # Filtra pela SUBESPECIALIDADE do militar selecionado
-                vagas_OM_selecionada = df_TP_BMA.query(f"Unidade == '{df_OMs.iloc[k,0]}' & Posto == '{posto}' & Quadro == '{quadro}' & Subespecialidade == '{subespecialidade}'")
-                
-                if not vagas_OM_selecionada.empty:
-                    # 2. CALCULA MOVIMENTAÇÃO USANDO O 'PLAMOV COMPILADO'
-                    # Aqui olhamos para todos os militares no PLAMOV para ver quem está indo/saindo
-                    # IMPORTANTE: Filtramos também pela 'SUB ESP' para garantir que um BMA 'Motores'
-                    # não ocupe a vaga de um BMA 'Célula'.
-                    
-                    # Chegando: Destino é a OM atual do loop (k) E é da mesma Subespecialidade
-                    chegando = df_plamov_compilado.query(f"PLAMOV == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == 'BMA' & `SUB ESP` == '{subespecialidade}'").shape[0]
-                    
-                    # Saindo: Origem é a OM atual do loop (k), tem destino definido, E é da mesma Subespecialidade
-                    saindo = df_plamov_compilado.query(f"`OM ATUAL` == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == 'BMA' & `SUB ESP` == '{subespecialidade}' & PLAMOV != ''").shape[0]
-                    
-                    # 3. EXTRAI DADOS DA TP BMA
-                    try:
-                        # Tenta pegar pelo nome das colunas
-                        TP = vagas_OM_selecionada.iloc[0]['TLP Ano Corrente'] 
-                        existentes_na_TP = vagas_OM_selecionada.iloc[0]['Existentes']
-                        
-                        # Tenta atualizar a Localidade para coloração (se disponível na TP BMA)
-                        if 'Localidade' in vagas_OM_selecionada.columns:
-                             df_OMs.loc[k,"Localidade"] = vagas_OM_selecionada.iloc[0]['Localidade']
-                    except:
-                        # Fallback se os nomes das colunas estiverem diferentes
-                        # Ajuste os índices conforme seu Excel real (0=Unidade, 1=Localidade...)
-                        TP = vagas_OM_selecionada.iloc[0, 4] 
-                        existentes_na_TP = vagas_OM_selecionada.iloc[0, 5]
+                # 1. SEGURANÇA: Garante que a coluna existe
+                if 'Subespecialidade' not in df_TP_BMA.columns:
+                    print(f"ERRO: Coluna 'Subespecialidade' não encontrada. Colunas: {df_TP_BMA.columns.tolist()}")
+                    return
 
-                    # 4. CÁLCULO FINAL (Matemática)
-                    # Vagas Reais = Meta (TP) + Quem sai - Quem chega
-                    df_OMs.loc[k,"Vagas"] = TP + saindo - chegando
-                    
-                    # Existentes Projetados = Existentes Hoje + Quem chega - Quem sai
-                    existentes = existentes_na_TP + chegando - saindo
-                    
-                    if TP != 0:    
-                        df_OMs.loc[k,"Taxa de Ocup."] = round(float(existentes)/float(TP), 4) * 100
-                    else:
-                        df_OMs.loc[k,"Taxa de Ocup."] = "Sem TP" # Tem gente mas a meta é 0
-                        df_OMs.loc[k,"Vagas"] = "" # Não faz sentido mostrar vaga se não tem TP
+                # 2. FILTRO: Busca a vaga na TP BMA usando a nova coluna Subespecialidade
+                filtro_bma = (
+                    (df_TP_BMA['Unidade'] == df_OMs.iloc[k,0]) & 
+                    (df_TP_BMA['Posto'] == posto) & 
+                    (df_TP_BMA['Quadro'] == quadro) & 
+                    (df_TP_BMA['Subespecialidade'] == subespecialidade)
+                )
+                vagas_OM_selecionada = df_TP_BMA[filtro_bma]
+                
+                # 3. SE ACHAR DADOS NA BMA
+                if not vagas_OM_selecionada.empty:
+                    # Pega os valores usando índices numéricos (conforme seu print do terminal)
+                    # 10=TLP, 11=Existentes, 12=Vagas
+                    try:
+                        TP = vagas_OM_selecionada.iloc[0, 12]        # Coluna Vagas
+                        existentes = vagas_OM_selecionada.iloc[0, 11] # Coluna Existentes
+                        tlp_valor = vagas_OM_selecionada.iloc[0, 10]  # Coluna TLP
+                        
+                        df_OMs.loc[k, "Existentes"] = existentes
+                        df_OMs.loc[k, "Vagas"] = TP
+                        
+                        # CÁLCULO DA TAXA (FEITO AQUI DENTRO PARA NÃO DAR ERRO)
+                        if tlp_valor > 0:
+                            df_OMs.loc[k, "Taxa de Ocup."] = round(float(existentes) / float(tlp_valor), 4) * 100
+                        else:
+                            df_OMs.loc[k, "Taxa de Ocup."] = 0.0
+                            
+                    except Exception as e:
+                        print(f"Erro de índice BMA: {e}")
+                        df_OMs.loc[k, "Taxa de Ocup."] = 0.0
+
+                # 4. SE NÃO ACHAR DADOS (OM sem previsão para essa subespecialidade)
                 else:
-                    # Não existe previsão dessa Subespecialidade para essa OM na TP BMA
-                    df_OMs.loc[k,"Taxa de Ocup."] = "Sem TP"
-                    df_OMs.loc[k,"Vagas"] = ""
+                    df_OMs.loc[k, "Existentes"] = 0
+                    df_OMs.loc[k, "Vagas"] = 0
+                    df_OMs.loc[k, "Taxa de Ocup."] = 0.0
 
             # ==============================================================================
             # LÓGICA PARA OUTROS QUADROS (Mantida original)
@@ -322,7 +319,13 @@ class UI(QMainWindow):
 
                     # Índices TP Geral (conforme seu código original)
                     TP = vagas_OM_selecionada.iloc[0,15] 
-                    existentes_na_TP = vagas_OM_selecionada.iloc[0,11]
+                    # Em vez de confiar que a coluna 11 é Existentes:
+                    try:
+                        existentes_na_TP = vagas_OM_selecionada.iloc[0]['Existentes']
+                    except:
+                        # Fallback apenas se der erro no nome
+                        existentes_na_TP = vagas_OM_selecionada.iloc[0, 11]
+                        existentes = existentes_na_TP + chegando - saindo
 
                     df_OMs.loc[k,"Vagas"] = TP + saindo - chegando
                     existentes = existentes_na_TP + chegando - saindo
@@ -382,7 +385,13 @@ class UI(QMainWindow):
                     saindo = df_plamov_compilado.query(f"`OM ATUAL` == '{df_OMs.iloc[k,0]}' & POSTO == 'CP' & QUADRO == '{quadro}' & ESP == '{especialidade}' & PLAMOV != ''").shape[0]
                     TP = vagas_OM_selecionada.iloc[0,15]
                     df_OMs.loc[k,"Vagas"] = TP + saindo - chegando
-                    existentes_na_TP = vagas_OM_selecionada.iloc[0,11]
+                    # Em vez de confiar que a coluna 11 é Existentes:
+                    try:
+                        existentes_na_TP = vagas_OM_selecionada.iloc[0]['Existentes']
+                    except:
+                        # Fallback apenas se der erro no nome
+                        existentes_na_TP = vagas_OM_selecionada.iloc[0, 11]
+                        existentes = existentes_na_TP + chegando - saindo
                     existentes = existentes_na_TP + chegando - saindo
                     
 
@@ -412,7 +421,13 @@ class UI(QMainWindow):
                     saindo = df_plamov_compilado.query(f"`OM ATUAL` == '{df_OMs.iloc[k,0]}' & (POSTO == 'TN') & QUADRO == '{quadro}' & ESP == '{especialidade}' & PLAMOV != ''").shape[0]
                     TP = vagas_OM_selecionada.iloc[0,15]
                     df_OMs.loc[k,"Vagas"] = TP + saindo - chegando
-                    existentes_na_TP = vagas_OM_selecionada.iloc[0,11]
+                    # Em vez de confiar que a coluna 11 é Existentes:
+                    try:
+                        existentes_na_TP = vagas_OM_selecionada.iloc[0]['Existentes']
+                    except:
+                        # Fallback apenas se der erro no nome
+                        existentes_na_TP = vagas_OM_selecionada.iloc[0, 11]
+                        existentes = existentes_na_TP + chegando - saindo
                     existentes = existentes_na_TP + chegando - saindo
                     #PEGA A LOCALIDADE DA OM
                     df_OMs.loc[k,"Localidade"] = vagas_OM_selecionada.iloc[0,0]
@@ -439,8 +454,13 @@ class UI(QMainWindow):
                     saindo = df_plamov_compilado.query(f"`OM ATUAL` == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == '{especialidade}' & PLAMOV != ''").shape[0]
                     TP = vagas_OM_selecionada.iloc[0,15]
                     df_OMs.loc[k,"Vagas"] = TP + saindo - chegando
-                    existentes_na_TP = vagas_OM_selecionada.iloc[0,11]
-                    existentes = existentes_na_TP + chegando - saindo
+                    # Em vez de confiar que a coluna 11 é Existentes:
+                    try:
+                        existentes_na_TP = vagas_OM_selecionada.iloc[0]['Existentes']
+                    except:
+                        # Fallback apenas se der erro no nome
+                        existentes_na_TP = vagas_OM_selecionada.iloc[0, 11]
+                        existentes = existentes_na_TP + chegando - saindo
 
                     #PEGA A LOCALIDADE DA OM
                     df_OMs.loc[k,"Localidade"] = vagas_OM_selecionada.iloc[0,0]
@@ -583,8 +603,7 @@ class UI(QMainWindow):
             
             # --- Configuração das Colunas (Sua lógica nova) ---
             COLUNAS_DESEJADAS = [
-                "LOC ATUAL", "OM ATUAL", "SARAM", "POSTO", "QUADRO", "ESP",
-                "LOC 1", "LOC 2", "LOC 3", "CÔNJUGE DA FAB?", "DADOS CÔNJUGE", "PLAMOV"
+                "LOC ATUAL", "OM ATUAL", "SARAM", "POSTO", "QUADRO", "ESP", "SUB ESP", "LOC 1", "LOC 2", "LOC 3", "CÔNJUGE DA FAB?", "DADOS CÔNJUGE", "PLAMOV"
             ]
 
             colunas_existentes = [col for col in COLUNAS_DESEJADAS if col in df_plamov_compilado.columns]
@@ -646,7 +665,7 @@ class UI(QMainWindow):
         global df_TP
         global df_TP_BMA 
         
-        # Carrega a TP Padrão (Mantemos caso use para outros quadros)
+        # Carrega a TP Padrão
         try:
             df_TP = pd.read_excel(endereco_do_arquivo, sheet_name="RELATÓRIO TP")
         except:
@@ -657,11 +676,27 @@ class UI(QMainWindow):
             df_TP_BMA = pd.read_excel(endereco_do_arquivo, sheet_name="RELATÓRIO TP BMA")
             df_TP_BMA.fillna(0, inplace=True)
             
-            # Padroniza os nomes das colunas (remove espaços extras nos títulos)
+            # 1. Remove espaços em branco antes e depois dos nomes das colunas
             df_TP_BMA.columns = df_TP_BMA.columns.str.strip()
+
+            # --- DEBUG: Verifique no terminal o que está sendo carregado ---
+            print("Colunas encontradas no Excel (TP BMA):", df_TP_BMA.columns.tolist())
+
+            # 2. PADRONIZAÇÃO DE NOMES
+            # O código espera "Subespecialidade", mas o Excel pode ter variações.
+            # Adicione aqui qualquer outra variação que seu Excel possa ter.
+            mapa_correcao = {
+                "Sub Especialidade": "Subespecialidade",
+                "SUB ESP": "Subespecialidade",
+                "Sub Esp": "Subespecialidade",
+                "Sub-Especialidade": "Subespecialidade",
+                "Subespecialidade ": "Subespecialidade" # Caso tenha espaço no final
+            }
+            df_TP_BMA.rename(columns=mapa_correcao, inplace=True)
+            
         except Exception as e:
             print(f"Erro ao carregar aba RELATÓRIO TP BMA: {e}")
-            df_TP_BMA = pd.DataFrame()    
+            df_TP_BMA = pd.DataFrame()   
         
     def linha_ativa_dados_militares (self): 
         global linha_selecionada_painel_esquerda
@@ -790,7 +825,7 @@ class UI(QMainWindow):
                 #colorir de branco
                 OM_selecionada_painel_direita.setBackground(QtGui.QColor(255,255,255))
                 
-            self.ui.tableWidget.setItem(linha_selecionada_painel_esquerda, 11, OM_selecionada_painel_direita)
+            self.ui.tableWidget.setItem(linha_selecionada_painel_esquerda, 12, OM_selecionada_painel_direita)
             df_plamov_compilado.loc[linha_selecionada_painel_esquerda, "PLAMOV"] = self.ui.tableWidget_2.item(linha_ativa_painel_direita, coluna_ativa_painel_direita).text()
             linha_ativa_painel_esquerda = self.linha_ativa_dados_militares()
             coluna_ativa_painel_esquerda = self.coluna_ativa_dados_militares()
