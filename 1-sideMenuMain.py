@@ -67,6 +67,12 @@ def pegar_quadro(linha):
 def pegar_especialidade(linha):
     especialidade = df_plamov_compilado["ESP"][int(linha)]
     return especialidade
+def pegar_subespecialidade(linha):
+    try:
+        sub = df_plamov_compilado["SUB ESP"][int(linha)]
+        return str(sub).strip() # Remove espaços extras por segurança
+    except:
+        return ""
 def pegar_posto(linha):
     if df_plamov_compilado["POSTO"][int(linha)] == "1S"\
         or df_plamov_compilado["POSTO"][int(linha)] == "2S"\
@@ -200,19 +206,169 @@ class UI(QMainWindow):
     def Pag_Mapa(self):
         self.ui.stackedWidget.setCurrentIndex(3)
    
+    # def atualizar_Painel_Direita (self):
+    #     global df_OMs
+    #     linha = self.linha_ativa_dados_militares()
+    #     posto = pegar_posto(linha)
+    #     quadro = pegar_quadro(linha)
+    #     especialidade = pegar_especialidade(linha)
+    #     loc1 = pegar_LOC1(linha)
+    #     loc2 = pegar_LOC2(linha)
+    #     loc3 = pegar_LOC3(linha)
+    #     loc_atual = pegar_LOC_atual(linha)
+    #     self.ui.tableWidget_2.setColumnCount(3)
+    #     self.ui.tableWidget_2.setRowCount(df_OMs.shape[0]) 
+    #     self.ui.tableWidget_2.setHorizontalHeaderLabels(["OM", "Taxa de Ocup.", "Vagas"])
+
     def atualizar_Painel_Direita (self):
         global df_OMs
+        global df_TP_BMA
+        global df_plamov_compilado
+        
         linha = self.linha_ativa_dados_militares()
+        
+        # --- DADOS DO MILITAR (Vêm do Painel Esquerdo / PLAMOV COMPILADO) ---
         posto = pegar_posto(linha)
         quadro = pegar_quadro(linha)
         especialidade = pegar_especialidade(linha)
+        subespecialidade = pegar_subespecialidade(linha) # Fundamental para BMA
+        
         loc1 = pegar_LOC1(linha)
         loc2 = pegar_LOC2(linha)
         loc3 = pegar_LOC3(linha)
         loc_atual = pegar_LOC_atual(linha)
+
+        # Configura tabela visual
         self.ui.tableWidget_2.setColumnCount(3)
         self.ui.tableWidget_2.setRowCount(df_OMs.shape[0]) 
         self.ui.tableWidget_2.setHorizontalHeaderLabels(["OM", "Taxa de Ocup.", "Vagas"])
+
+        for k in range(df_OMs.shape[0]):
+            chegando = 0
+            saindo = 0
+            
+            # ==============================================================================
+            # LÓGICA BMA (CRUZAMENTO PLAMOV + TP BMA)
+            # ==============================================================================
+            if especialidade == "BMA":
+                # 1. BUSCA A VAGA NA TP BMA (Para saber a capacidade/meta)
+                # Filtra pela SUBESPECIALIDADE do militar selecionado
+                vagas_OM_selecionada = df_TP_BMA.query(f"Unidade == '{df_OMs.iloc[k,0]}' & Posto == '{posto}' & Quadro == '{quadro}' & Subespecialidade == '{subespecialidade}'")
+                
+                if not vagas_OM_selecionada.empty:
+                    # 2. CALCULA MOVIMENTAÇÃO USANDO O 'PLAMOV COMPILADO'
+                    # Aqui olhamos para todos os militares no PLAMOV para ver quem está indo/saindo
+                    # IMPORTANTE: Filtramos também pela 'SUB ESP' para garantir que um BMA 'Motores'
+                    # não ocupe a vaga de um BMA 'Célula'.
+                    
+                    # Chegando: Destino é a OM atual do loop (k) E é da mesma Subespecialidade
+                    chegando = df_plamov_compilado.query(f"PLAMOV == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == 'BMA' & `SUB ESP` == '{subespecialidade}'").shape[0]
+                    
+                    # Saindo: Origem é a OM atual do loop (k), tem destino definido, E é da mesma Subespecialidade
+                    saindo = df_plamov_compilado.query(f"`OM ATUAL` == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == 'BMA' & `SUB ESP` == '{subespecialidade}' & PLAMOV != ''").shape[0]
+                    
+                    # 3. EXTRAI DADOS DA TP BMA
+                    try:
+                        # Tenta pegar pelo nome das colunas
+                        TP = vagas_OM_selecionada.iloc[0]['TLP Ano Corrente'] 
+                        existentes_na_TP = vagas_OM_selecionada.iloc[0]['Existentes']
+                        
+                        # Tenta atualizar a Localidade para coloração (se disponível na TP BMA)
+                        if 'Localidade' in vagas_OM_selecionada.columns:
+                             df_OMs.loc[k,"Localidade"] = vagas_OM_selecionada.iloc[0]['Localidade']
+                    except:
+                        # Fallback se os nomes das colunas estiverem diferentes
+                        # Ajuste os índices conforme seu Excel real (0=Unidade, 1=Localidade...)
+                        TP = vagas_OM_selecionada.iloc[0, 4] 
+                        existentes_na_TP = vagas_OM_selecionada.iloc[0, 5]
+
+                    # 4. CÁLCULO FINAL (Matemática)
+                    # Vagas Reais = Meta (TP) + Quem sai - Quem chega
+                    df_OMs.loc[k,"Vagas"] = TP + saindo - chegando
+                    
+                    # Existentes Projetados = Existentes Hoje + Quem chega - Quem sai
+                    existentes = existentes_na_TP + chegando - saindo
+                    
+                    if TP != 0:    
+                        df_OMs.loc[k,"Taxa de Ocup."] = round(float(existentes)/float(TP), 4) * 100
+                    else:
+                        df_OMs.loc[k,"Taxa de Ocup."] = "Sem TP" # Tem gente mas a meta é 0
+                        df_OMs.loc[k,"Vagas"] = "" # Não faz sentido mostrar vaga se não tem TP
+                else:
+                    # Não existe previsão dessa Subespecialidade para essa OM na TP BMA
+                    df_OMs.loc[k,"Taxa de Ocup."] = "Sem TP"
+                    df_OMs.loc[k,"Vagas"] = ""
+
+            # ==============================================================================
+            # LÓGICA PARA OUTROS QUADROS (Mantida original)
+            # ==============================================================================
+            else:
+                if posto == "CP":
+                    vagas_OM_selecionada = df_TP.query(f"Unidade == '{df_OMs.iloc[k,0]}' & ((Posto == 'CP/TN') | (Posto == 'CP')) & Quadro == '{quadro}' & Especialidade == '{especialidade}'")
+                elif posto == "TN":
+                    vagas_OM_selecionada = df_TP.query(f"Unidade == '{df_OMs.iloc[k,0]}' & ((Posto == 'CP/TN') | (Posto == 'TN')) & Quadro == '{quadro}' & Especialidade == '{especialidade}'")
+                else:
+                    vagas_OM_selecionada = df_TP.query(f"Unidade == '{df_OMs.iloc[k,0]}' & Posto == '{posto}' & Quadro == '{quadro}' & Especialidade == '{especialidade}'")
+                
+                if not vagas_OM_selecionada.empty:
+                    df_OMs.loc[k,"Localidade"] = vagas_OM_selecionada.iloc[0,0] # Pega localidade da TP Geral
+
+                    if posto == "CP" or posto == "TN":
+                        chegando = df_plamov_compilado.query(f"PLAMOV == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == '{especialidade}'").shape[0]
+                        saindo = df_plamov_compilado.query(f"`OM ATUAL` == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == '{especialidade}' & PLAMOV != ''").shape[0]
+                    else:
+                        chegando = df_plamov_compilado.query(f"PLAMOV == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == '{especialidade}'").shape[0]
+                        saindo = df_plamov_compilado.query(f"`OM ATUAL` == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == '{especialidade}' & PLAMOV != ''").shape[0]
+
+                    # Índices TP Geral (conforme seu código original)
+                    TP = vagas_OM_selecionada.iloc[0,15] 
+                    existentes_na_TP = vagas_OM_selecionada.iloc[0,11]
+
+                    df_OMs.loc[k,"Vagas"] = TP + saindo - chegando
+                    existentes = existentes_na_TP + chegando - saindo
+
+                    if vagas_OM_selecionada.iloc[0,10] != 0:    
+                        df_OMs.loc[k,"Taxa de Ocup."] = round(float(existentes)/float(vagas_OM_selecionada.iloc[0,10]), 4) * 100
+                    else:
+                        df_OMs.loc[k,"Taxa de Ocup."] = "Sem TP"
+                        df_OMs.loc[k,"Vagas"] = ""
+                else:
+                    df_OMs.loc[k,"Taxa de Ocup."] = "Sem TP"
+                    df_OMs.loc[k,"Vagas"] = ""
+
+        # ==============================================================================
+        # PREENCHIMENTO VISUAL (Comum a todos)
+        # ==============================================================================
+        df_OMs.sort_values(by=['Taxa de Ocup.', 'Vagas'], ascending=[True, False], inplace=True)
+        df_OMs.reset_index(drop=True, inplace=True)
+
+        for i in range(df_OMs.shape[0]):
+            for j in range(3):
+                item = QtWidgets.QTableWidgetItem(str(df_OMs.iloc[i,j]))
+                self.ui.tableWidget_2.setItem(i,j, item)
+                
+                if i%2:
+                    self.ui.tableWidget_2.item(i, j).setBackground(QtGui.QColor(100, 139, 245))
+                
+                om_loc = str(df_OMs.iloc[i,3]).strip().upper()
+                l1 = str(loc1).strip().upper()
+                l2 = str(loc2).strip().upper()
+                l3 = str(loc3).strip().upper()
+                
+                if om_loc == l3 and l3 != "":
+                    self.ui.tableWidget_2.item(i, j).setBackground(QtGui.QColor(255, 0, 255))
+                if om_loc == l2 and l2 != "":
+                    self.ui.tableWidget_2.item(i, j).setBackground(QtGui.QColor(255, 243, 8))
+                if om_loc == l1 and l1 != "":
+                    self.ui.tableWidget_2.item(i, j).setBackground(QtGui.QColor(29, 181, 2))
+            
+            if str(df_OMs.iloc[i,0]).strip().upper() == str(loc_atual).strip().upper():
+                item = QtWidgets.QTableWidgetItem(str(df_OMs.iloc[i,0]))
+                self.ui.tableWidget_2.setItem(i,0, item)
+                self.ui.tableWidget_2.item(i, 0).setBackground(QtGui.QColor(107, 107, 106))
+
+        df_OMs["Taxa de Ocup."] = ""
+        df_OMs["Vagas"] = ""
 
         
         for k in range(df_OMs.shape[0]):
@@ -331,97 +487,181 @@ class UI(QMainWindow):
         df_OMs["'Vagas'"] = ""
         df_OMs["Localidade"] = ""
 
+    ####################################
+
     def Abrir_Dialogo_Carregar_Dados(self):
         resultado = QFileDialog.getOpenFileName(self, "Qual arquivo gostaria de carregar?", caminho_atual, 'Excel files (*.xlsx)')
         endereco_do_arquivo = resultado[0]  # obtém o endereço do arquivo do resultado
         if endereco_do_arquivo:  # verifica se o endereço do arquivo não é vazio
             self.Carregar_Dados_dos_militares()  # chama a função para carregar os dados
 
+    # def Carregar_Dados_dos_militares(self):
+    #     global endereco_do_arquivo
+    #     global df_OMs
+    #     global df_plamov_compilado
+    #     global status_painel 
+    #     endereco_do_arquivo = QFileDialog.getOpenFileName(self, "Qual arquivo gostaria de carregar?", caminho_atual, 'Excel files (*.xlsx)')[0]
+    #     if endereco_do_arquivo:
+    #         df_plamov_compilado = pd.read_excel(endereco_do_arquivo, sheet_name="PLAMOV COMPILADO")
+    #         df_plamov_compilado = df_plamov_compilado.fillna("") #Troca os "NaN" valor vazio
+
+    #         df_plamov_compilado['ordem original'] = df_plamov_compilado.index
+            
+    #         self.ui.tableWidget.setColumnCount(12) #quantidade de colunas
+    #         self.ui.tableWidget.setRowCount(df_plamov_compilado.shape[0]) #quantidade de linhas
+    #         # self.ui.tableWidget.setHorizontalHeaderLabels(df_plamov_compilado.columns.to_list())
+
+    #         df_plamov_compilado = df_plamov_compilado.sort_values(by=['MELHOR PRIO', 'TEMPO LOC', 'ANTIGUIDADE'], ascending=[True, False, True])
+    #         df_plamov_compilado = df_plamov_compilado.reset_index(drop=True)
+
+    #         #rodar um for para pegar os header e montar uma lista
+    #         lista_nome_colunas_painel_esquerda = []
+    #         for j in range(1, 7):
+    #             lista_nome_colunas_painel_esquerda.append(df_plamov_compilado.columns[j])
+    #         for j in range(13, 16):
+    #             lista_nome_colunas_painel_esquerda.append(df_plamov_compilado.columns[j]) 
+    #         for j in range(18, 20):
+    #             lista_nome_colunas_painel_esquerda.append(df_plamov_compilado.columns[j])
+    #         lista_nome_colunas_painel_esquerda.append(df_plamov_compilado.columns[41])
+
+    #         coluna_tableWidget_esquerda = 0
+    #         self.ui.tableWidget.setHorizontalHeaderLabels(lista_nome_colunas_painel_esquerda)
+    #         for i in range(df_plamov_compilado.shape[0]):
+    #             for j in range(1, 7):
+    #                 item = QtWidgets.QTableWidgetItem(str(df_plamov_compilado.iloc[i,j]))
+    #                 self.ui.tableWidget.setItem(i,coluna_tableWidget_esquerda, item)
+    #                 if i%2:
+    #                     self.ui.tableWidget.item(i, coluna_tableWidget_esquerda).setBackground(QtGui.QColor(100, 139, 245))
+    #                 coluna_tableWidget_esquerda += 1
+    #             for j in range(13, 16):
+    #                 item = QtWidgets.QTableWidgetItem(str(df_plamov_compilado.iloc[i,j]))
+    #                 self.ui.tableWidget.setItem(i,coluna_tableWidget_esquerda, item)
+    #                 if i%2:
+    #                     self.ui.tableWidget.item(i, coluna_tableWidget_esquerda).setBackground(QtGui.QColor(100, 139, 245))
+    #                 coluna_tableWidget_esquerda += 1
+    #             for j in range(18, 20):
+    #                 item = QtWidgets.QTableWidgetItem(str(df_plamov_compilado.iloc[i,j]))
+    #                 self.ui.tableWidget.setItem(i,coluna_tableWidget_esquerda, item)
+    #                 if i%2:
+    #                     self.ui.tableWidget.item(i, coluna_tableWidget_esquerda).setBackground(QtGui.QColor(100, 139, 245))
+    #                 coluna_tableWidget_esquerda += 1
+    #             item = QtWidgets.QTableWidgetItem(str(df_plamov_compilado.iloc[i,41]))
+    #             self.ui.tableWidget.setItem(i,coluna_tableWidget_esquerda, item)
+    #             if i%2:
+    #                 self.ui.tableWidget.item(i, coluna_tableWidget_esquerda).setBackground(QtGui.QColor(100, 139, 245))
+    #             coluna_tableWidget_esquerda = 0
+    #         status_painel = "carregado"
+    #     else:
+    #         pass
+
+    #     df_OMs = pegar_OMs_do_COMPREP()
+
+    #     #TODO apagar essa linha antes de entregar
+    #     self.ui.tableWidget.setCurrentCell(5,41)
+    #     self.carregar_Relat_rio_TP()
+        ####################################
+
     def Carregar_Dados_dos_militares(self):
         global endereco_do_arquivo
         global df_OMs
         global df_plamov_compilado
         global status_painel 
-        endereco_do_arquivo = QFileDialog.getOpenFileName(self, "Qual arquivo gostaria de carregar?", caminho_atual, 'Excel files (*.xlsx)')[0]
-        if endereco_do_arquivo:
-            df_plamov_compilado = pd.read_excel(endereco_do_arquivo, sheet_name="PLAMOV COMPILADO")
-            df_plamov_compilado = df_plamov_compilado.fillna("") #Troca os "NaN" valor vazio
+        
+        # 1. Tenta pegar o endereço do arquivo
+        try:
+            # Pega apenas a string do caminho (índice [0])
+            endereco_do_arquivo = QFileDialog.getOpenFileName(self, "Qual arquivo gostaria de carregar?", caminho_atual, 'Excel files (*.xlsx)')[0]
+        except:
+            endereco_do_arquivo = ""
 
+        # 2. Só executa o carregamento SE o endereço não estiver vazio
+        if endereco_do_arquivo:
+            # --- Carrega a aba PLAMOV COMPILADO ---
+            df_plamov_compilado = pd.read_excel(endereco_do_arquivo, sheet_name="PLAMOV COMPILADO")
+            df_plamov_compilado = df_plamov_compilado.fillna("") 
             df_plamov_compilado['ordem original'] = df_plamov_compilado.index
             
-            self.ui.tableWidget.setColumnCount(12) #quantidade de colunas
-            self.ui.tableWidget.setRowCount(df_plamov_compilado.shape[0]) #quantidade de linhas
-            # self.ui.tableWidget.setHorizontalHeaderLabels(df_plamov_compilado.columns.to_list())
+            # --- Configuração das Colunas (Sua lógica nova) ---
+            COLUNAS_DESEJADAS = [
+                "LOC ATUAL", "OM ATUAL", "SARAM", "POSTO", "QUADRO", "ESP",
+                "LOC 1", "LOC 2", "LOC 3", "CÔNJUGE DA FAB?", "DADOS CÔNJUGE", "PLAMOV"
+            ]
 
-            df_plamov_compilado = df_plamov_compilado.sort_values(by=['MELHOR PRIO', 'TEMPO LOC', 'ANTIGUIDADE'], ascending=[True, False, True])
-            df_plamov_compilado = df_plamov_compilado.reset_index(drop=True)
+            colunas_existentes = [col for col in COLUNAS_DESEJADAS if col in df_plamov_compilado.columns]
+            
+            try:
+                mapa_indices = {nome: df_plamov_compilado.columns.get_loc(nome) for nome in colunas_existentes}
+                indices_a_exibir = [mapa_indices[nome] for nome in colunas_existentes]
+            except KeyError as e:
+                print(f"ERRO CRÍTICO: Coluna não encontrada: {e}")
+                return 
 
-            #rodar um for para pegar os header e montar uma lista
-            lista_nome_colunas_painel_esquerda = []
-            for j in range(1, 7):
-                lista_nome_colunas_painel_esquerda.append(df_plamov_compilado.columns[j])
-            for j in range(13, 16):
-                lista_nome_colunas_painel_esquerda.append(df_plamov_compilado.columns[j]) 
-            for j in range(18, 20):
-                lista_nome_colunas_painel_esquerda.append(df_plamov_compilado.columns[j])
-            lista_nome_colunas_painel_esquerda.append(df_plamov_compilado.columns[41])
+            self.ui.tableWidget.setColumnCount(len(colunas_existentes))
+            self.ui.tableWidget.setRowCount(df_plamov_compilado.shape[0])
+            self.ui.tableWidget.setHorizontalHeaderLabels(colunas_existentes)
 
+            # --- Ordenação ---
+            cols_ordenacao = ['MELHOR PRIO', 'TEMPO LOC', 'ANTIGUIDADE']
+            cols_presentes = [c for c in cols_ordenacao if c in df_plamov_compilado.columns]
+            if cols_presentes:
+                asc_order = [True, False, True][:len(cols_presentes)]
+                df_plamov_compilado = df_plamov_compilado.sort_values(by=cols_presentes, ascending=asc_order)
+                df_plamov_compilado = df_plamov_compilado.reset_index(drop=True)
+
+            # --- Preenchimento da Tabela Visual ---
             coluna_tableWidget_esquerda = 0
-            self.ui.tableWidget.setHorizontalHeaderLabels(lista_nome_colunas_painel_esquerda)
-            for i in range(df_plamov_compilado.shape[0]):
-                for j in range(1, 7):
-                    item = QtWidgets.QTableWidgetItem(str(df_plamov_compilado.iloc[i,j]))
-                    self.ui.tableWidget.setItem(i,coluna_tableWidget_esquerda, item)
-                    if i%2:
+            for i in range(df_plamov_compilado.shape[0]): 
+                for df_index in indices_a_exibir: 
+                    valor_celula = str(df_plamov_compilado.iloc[i, df_index])
+                    item = QtWidgets.QTableWidgetItem(valor_celula)
+                    self.ui.tableWidget.setItem(i, coluna_tableWidget_esquerda, item)
+                    
+                    if i % 2:
                         self.ui.tableWidget.item(i, coluna_tableWidget_esquerda).setBackground(QtGui.QColor(100, 139, 245))
+                        
                     coluna_tableWidget_esquerda += 1
-                for j in range(13, 16):
-                    item = QtWidgets.QTableWidgetItem(str(df_plamov_compilado.iloc[i,j]))
-                    self.ui.tableWidget.setItem(i,coluna_tableWidget_esquerda, item)
-                    if i%2:
-                        self.ui.tableWidget.item(i, coluna_tableWidget_esquerda).setBackground(QtGui.QColor(100, 139, 245))
-                    coluna_tableWidget_esquerda += 1
-                for j in range(18, 20):
-                    item = QtWidgets.QTableWidgetItem(str(df_plamov_compilado.iloc[i,j]))
-                    self.ui.tableWidget.setItem(i,coluna_tableWidget_esquerda, item)
-                    if i%2:
-                        self.ui.tableWidget.item(i, coluna_tableWidget_esquerda).setBackground(QtGui.QColor(100, 139, 245))
-                    coluna_tableWidget_esquerda += 1
-                item = QtWidgets.QTableWidgetItem(str(df_plamov_compilado.iloc[i,41]))
-                self.ui.tableWidget.setItem(i,coluna_tableWidget_esquerda, item)
-                if i%2:
-                    self.ui.tableWidget.item(i, coluna_tableWidget_esquerda).setBackground(QtGui.QColor(100, 139, 245))
-                coluna_tableWidget_esquerda = 0
+                coluna_tableWidget_esquerda = 0 
+            
             status_painel = "carregado"
-        else:
-            pass
 
+            # -------------------------------------------------------------------------
+            # CORREÇÃO: Estas funções agora estão DENTRO do 'if endereco_do_arquivo:'
+            # Elas só rodam se o arquivo tiver sido carregado com sucesso.
+            # -------------------------------------------------------------------------
+            df_OMs = pegar_OMs_do_COMPREP() # Carrega a lista de OMs
+            self.carregar_Relat_rio_TP()    # Carrega as tabelas TP e TP BMA
+            
+            # Tenta selecionar uma célula inicial (cosmético)
+            try:
+                self.ui.tableWidget.setCurrentCell(5, len(COLUNAS_DESEJADAS)-1)
+            except:
+                pass
         
-
-        df_OMs = pegar_OMs_do_COMPREP()
-
-        #TODO apagar essa linha antes de entregar
-        self.ui.tableWidget.setCurrentCell(5,41)
-        self.carregar_Relat_rio_TP()
-        ####################################
+        else:
+            # Se o usuário cancelar ou o arquivo for inválido, não faz nada
+            print("Nenhum arquivo selecionado.")
+            pass
 
     def carregar_Relat_rio_TP(self):
         global df_TP
-        #endereco_do_arquivo = QFileDialog.getOpenFileName(self, "Qual arquivo gostaria de carregar?", pasta_atual, 'Excel files (*.xlsx)')
+        global df_TP_BMA 
         
-        #nome_do_arquivo = endereco_do_arquivo[0].split("/")[-1] # pega somente o nome do arquivo, sem o endereço.
-        df_TP = pd.read_excel(endereco_do_arquivo, sheet_name="RELATÓRIO TP")
-        #DESCRIÇÃO: ESSE BLOCO CARREGA O DF NA GUI
-        # self.ui.tableWidget_3.setColumnCount(df_TP.shape[1])
-        # self.ui.tableWidget_3.setRowCount(df_TP.shape[0]) #quantidade de linhas
-        # self.ui.tableWidget_3.setHorizontalHeaderLabels(df_TP.columns.to_list())
+        # Carrega a TP Padrão (Mantemos caso use para outros quadros)
+        try:
+            df_TP = pd.read_excel(endereco_do_arquivo, sheet_name="RELATÓRIO TP")
+        except:
+            pass
 
-        # for i in range(df_TP.shape[0]):
-        #     for j in range(df_TP.shape[1]):
-        #         item = QtWidgets.QTableWidgetItem(str(df_TP.iloc[i,j]))
-        #         self.ui.tableWidget_3.setItem(i,j, item)
-        #         if i%2:
-        #             self.ui.tableWidget_3.item(i, j).setBackground(QtGui.QColor(100, 139, 245))    
+        # --- CARREGAMENTO DA TP BMA ---
+        try:
+            df_TP_BMA = pd.read_excel(endereco_do_arquivo, sheet_name="RELATÓRIO TP BMA")
+            df_TP_BMA.fillna(0, inplace=True)
+            
+            # Padroniza os nomes das colunas (remove espaços extras nos títulos)
+            df_TP_BMA.columns = df_TP_BMA.columns.str.strip()
+        except Exception as e:
+            print(f"Erro ao carregar aba RELATÓRIO TP BMA: {e}")
+            df_TP_BMA = pd.DataFrame()    
         
     def linha_ativa_dados_militares (self): 
         global linha_selecionada_painel_esquerda
