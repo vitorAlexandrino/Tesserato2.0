@@ -602,6 +602,8 @@ class UI(QMainWindow):
             # ==============================================================================
             # A comparação agora é segura porque usamos .strip() acima
             if especialidade == "BMA":
+                if k == 0:
+                    self.contar_militares_mesma_subespecialidade()
                 # Filtro robusto para achar a vaga na tabela BMA
                 filtro_bma = (
                     (df_TP_BMA['Unidade'].astype(str).str.strip() == str(df_OMs.iloc[k,0]).strip()) & 
@@ -723,6 +725,76 @@ class UI(QMainWindow):
         
         # Note: Não há mais limpeza de colunas aqui, pois elas são redefinidas no início da função.
     
+    def contar_militares_mesma_subespecialidade(self):
+        global df_plamov_compilado
+        
+        # 1. Identifica a linha selecionada (Índice atual)
+        linha_atual = self.linha_ativa_dados_militares()
+        
+        # 2. Pega a subespecialidade do militar selecionado
+        subespecialidade_alvo = pegar_subespecialidade(linha_atual)
+        
+        # 3. Validação
+        if not subespecialidade_alvo or subespecialidade_alvo == "nan":
+            return 0
+
+        # ==============================================================================
+        # A MÁGICA ACONTECE AQUI: FATIAMENTO (SLICING)
+        # ==============================================================================
+        
+        # Cria um novo DataFrame temporário contendo apenas as linhas
+        # do índice seguinte (linha_atual + 1) até o final da lista (:).
+        df_abaixo = df_plamov_compilado.iloc[linha_atual + 1 : ]
+        
+        # 4. Filtra apenas nesse DataFrame "recortado"
+        filtro = df_abaixo["SUB ESP"].astype(str).str.strip() == subespecialidade_alvo.strip()
+        
+        # Conta as linhas resultantes
+        quantidade = df_abaixo[filtro].shape[0]
+        
+        # 5. Retorno/Exibição
+        print(f"--- CONTAGEM ---")
+        print(f"Militar atual (Linha): {linha_atual}")
+        print(f"Subespecialidade: {subespecialidade_alvo}")
+        print(f"Militares abaixo (na fila): {quantidade}")
+        
+        return quantidade
+    
+    def marcar_saram_com_bandeira(self, linha_alvo):
+        """
+        Insere o ícone ⚑ na coluna SARAM da linha especificada.
+        """
+        # 1. Descobre qual é o índice da coluna "SARAM"
+        # Isso é importante caso você mude a ordem das colunas no futuro
+        coluna_saram = -1
+        for col in range(self.ui.tableWidget.columnCount()):
+            item_header = self.ui.tableWidget.horizontalHeaderItem(col)
+            if item_header and item_header.text() == "SARAM":
+                coluna_saram = col
+                break
+        
+        # Se não achou a coluna SARAM, para por aqui
+        if coluna_saram == -1:
+            print("Coluna SARAM não encontrada na tabela.")
+            return
+
+        # 2. Pega o item (célula) específico naquela linha e coluna
+        item = self.ui.tableWidget.item(linha_alvo, coluna_saram)
+        
+        if item:
+            texto_atual = item.text()
+            
+            # 3. Verifica se já tem a bandeira para não colocar duas vezes
+            if "⚑" not in texto_atual:
+                novo_texto = f"⚑ {texto_atual}"
+                item.setText(novo_texto)
+                
+                # Opcional: Mudar a cor do texto para Vermelho para destacar mais
+                item.setForeground(QtGui.QColor("red"))
+                
+                print(f"Bandeira adicionada na linha {linha_alvo}, SARAM {texto_atual}")
+            else:
+                print("Este militar já está marcado.")
     
     def Abrir_Dialogo_Carregar_Dados(self):
         resultado = QFileDialog.getOpenFileName(self, "Qual arquivo gostaria de carregar?", caminho_atual, 'Excel files (*.xlsx)')
