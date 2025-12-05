@@ -602,8 +602,8 @@ class UI(QMainWindow):
             # ==============================================================================
             # A comparação agora é segura porque usamos .strip() acima
             if especialidade == "BMA":
-                if k == 0:
-                    self.contar_militares_mesma_subespecialidade()
+                # if k == 0:
+                #     self.contar_militares_mesma_subespecialidade()
                 # Filtro robusto para achar a vaga na tabela BMA
                 filtro_bma = (
                     (df_TP_BMA['Unidade'].astype(str).str.strip() == str(df_OMs.iloc[k,0]).strip()) & 
@@ -615,31 +615,49 @@ class UI(QMainWindow):
                 vagas_OM_selecionada = df_TP_BMA[filtro_bma]
                 
                 if not vagas_OM_selecionada.empty:
+                    # --- CORREÇÃO DO FILTRO DE POSTOS ---
+                    # O 'posto' vem como "SGT", mas no Excel está "1S", "2S", etc.
+                    # Precisamos ajustar o filtro para pegar qualquer um desses.
+                    if posto == "SGT":
+                        query_posto = "POSTO in ['1S', '2S', '3S', 'SO']"
+                    elif posto == "TN":
+                        query_posto = "POSTO in ['1T', '2T']"
+                    else:
+                        query_posto = f"POSTO == '{posto}'"
+                    # ------------------------------------
 
-                    # Cálculos de Chegando/Saindo
+                    # 2. Calcula Movimentação (USANDO O FILTRO CORRIGIDO)
                     chegando = df_plamov_compilado.query(
-                        f"PLAMOV == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == 'BMA' & `SUB ESP` == '{subespecialidade}'"
+                        f"PLAMOV == '{df_OMs.iloc[k,0]}' & {query_posto} & QUADRO == '{quadro}' & ESP == 'BMA' & `SUB ESP` == '{subespecialidade}'"
                     ).shape[0]
                     
                     saindo = df_plamov_compilado.query(
-                        f"`OM ATUAL` == '{df_OMs.iloc[k,0]}' & POSTO == '{posto}' & QUADRO == '{quadro}' & ESP == 'BMA' & `SUB ESP` == '{subespecialidade}' & PLAMOV != ''"
+                        f"`OM ATUAL` == '{df_OMs.iloc[k,0]}' & {query_posto} & QUADRO == '{quadro}' & ESP == 'BMA' & `SUB ESP` == '{subespecialidade}' & PLAMOV != ''"
                     ).shape[0]
-                    
-                    # Extração dos dados da TP BMA
-                    
-                    # Tenta pegar pelo NOME (Mais seguro)
-                    # VERIFIQUE SE O NOME DA COLUNA NO SEU EXCEL É EXATAMENTE "TLP Ano Corrente"
-                    TP = vagas_OM_selecionada.iloc[0]['TLP Ano Corrente'] 
-                    existentes_na_TP = vagas_OM_selecionada.iloc[0]['Existentes']
 
-                    existentes = existentes_na_TP + chegando - saindo
-                    df_OMs.loc[k,"Vagas"] = TP - existentes
+                    # --- DEBUG VISUAL (Opcional: Pode remover depois) ---
+                    # if chegando > 0 or saindo > 0:
+                    #     print(f"OM {df_OMs.iloc[k,0]}: Chegando={chegando}, Saindo={saindo} (Sub: {subespecialidade})")
+                    # ----------------------------------------------------
                     
-                    if TP != 0:    
-                        df_OMs.loc[k,"Taxa de Ocup."] = round(float(existentes)/float(TP), 4) * 100
-                    else:
+                    # 3. Extrai dados da TP BMA (Mantido igual)
+                    try:
+                        TP = int(vagas_OM_selecionada.iloc[0]['TLP Ano Corrente'])
+                        existentes_na_TP = int(vagas_OM_selecionada.iloc[0]['Existentes'])
+                        if 'Localidade' in vagas_OM_selecionada.columns:
+                             df_OMs.loc[k,"Localidade"] = vagas_OM_selecionada.iloc[0]['Localidade']
+                    except KeyError:
+                        TP = 0
+                        existentes_na_TP = 0
+
+                    # 4. Fórmula (Mantida igual)
+                    if TP == 0:
                         df_OMs.loc[k,"Taxa de Ocup."] = "Sem TP"
-                        df_OMs.loc[k,"Vagas"] = ""
+                        df_OMs.loc[k,"Vagas"] = "" 
+                    else:
+                        df_OMs.loc[k,"Vagas"] = TP - existentes_na_TP + saindo - chegando
+                        existentes_futuro = existentes_na_TP + chegando - saindo
+                        df_OMs.loc[k,"Taxa de Ocup."] = round(float(existentes_futuro)/float(TP), 4) * 100
                
 
             # ==============================================================================
@@ -722,7 +740,7 @@ class UI(QMainWindow):
                 self.ui.tableWidget_2.setItem(i,0, item)
                 # Pinta a primeira célula de Cinza Escuro
                 self.ui.tableWidget_2.item(i, 0).setBackground(QtGui.QColor(107, 107, 106))
-        
+        self.analisar_impacto_transferencia()
         # Note: Não há mais limpeza de colunas aqui, pois elas são redefinidas no início da função.
     
     def contar_militares_mesma_subespecialidade(self):
@@ -759,6 +777,84 @@ class UI(QMainWindow):
         print(f"Militares abaixo (na fila): {quantidade}")
         
         return quantidade
+    
+    def analisar_impacto_transferencia(self):
+        """
+        Verifica se a saída do militar vai quebrar a taxa de 70% da OM de origem
+        e conta quantos reservas existem abaixo na lista.
+        """
+        global df_plamov_compilado
+        global df_TP_BMA
+        
+        # 1. Dados do Militar Selecionado
+        linha_atual = self.linha_ativa_dados_militares()
+        
+        # Cuidado: Pegar a OM ATUAL (Origem), não o destino (PLAMOV)
+        om_origem = str(df_plamov_compilado["OM ATUAL"].iloc[linha_atual]).strip()
+        subespecialidade = pegar_subespecialidade(linha_atual)
+        
+        if not subespecialidade or subespecialidade == "nan":
+            return # Sem dados para analisar
+
+        # 2. Diagnóstico da OM de Origem (TP BMA)
+        # Filtra a TP BMA pela OM e Subespecialidade (somando todos os postos)
+        filtro_tp = (
+            (df_TP_BMA['Unidade'].astype(str).str.strip() == om_origem) & 
+            (df_TP_BMA['Subespecialidade'].astype(str).str.strip() == subespecialidade)
+        )
+        dados_tp = df_TP_BMA[filtro_tp]
+        
+        if dados_tp.empty:
+            print(f"ALERTA: OM de origem {om_origem} não tem previsão na TP para {subespecialidade}.")
+            return
+
+        # Soma TLP e Existentes (caso haja distinção de postos, somamos tudo daquela subespecialidade)
+        # Ajuste os nomes das colunas 'TLP Ano Corrente' e 'Existentes' se necessário
+        try:
+            total_meta = dados_tp['TLP Ano Corrente'].sum()
+            total_existentes = dados_tp['Existentes'].sum()
+        except KeyError:
+            # Fallback para índices se os nomes mudaram
+            total_meta = dados_tp.iloc[:, 4].sum() 
+            total_existentes = dados_tp.iloc[:, 5].sum()
+
+        if total_meta == 0:
+            return # Evita divisão por zero
+
+        # 3. Simulação da Saída
+        taxa_atual = total_existentes / total_meta
+        taxa_projetada = (total_existentes - 1) / total_meta
+        
+        # 4. Verificação do Gatilho (Abaixo de 70%)
+        # Se a taxa JÁ ERA ruim, ou SE VAI FICAR ruim
+        if taxa_projetada < 0.70:
+            
+            # 5. Busca de Reservas (Militares abaixo na lista)
+            df_abaixo = df_plamov_compilado.iloc[linha_atual + 1 : ]
+            
+            # Filtra apenas pela mesma subespecialidade (conforme sua regra)
+            reservas = df_abaixo[df_abaixo["SUB ESP"].astype(str).str.strip() == subespecialidade].shape[0]
+
+            # 6. GERAÇÃO DO ALERTA (Mensagem Prática)
+            msg_alerta = (
+                f"⚠️ ATENÇÃO: A saída deste militar derruba a {om_origem} para {taxa_projetada:.1%} "
+                f"(Meta: 70%).\n"
+                f"RESERVAS DISPONÍVEIS ABAIXO: {reservas} militares de {subespecialidade}."
+            )
+            
+            print(msg_alerta) # Mostra no terminal para debug
+            
+            # SUGESTÃO PRÁTICA: Mostrar na Barra de Status do Programa (Rodapé)
+            # Isso é discreto mas visível para o analista
+            self.ui.statusbar.showMessage(msg_alerta)
+            
+            # Opcional: Mudar a cor da StatusBar para vermelho para chamar atenção
+            self.ui.statusbar.setStyleSheet("color: red; font-weight: bold;")
+
+        else:
+            # Se estiver tudo seguro
+            self.ui.statusbar.showMessage(f"✔ Saída segura. {om_origem} manterá taxa de {taxa_projetada:.1%} (Sub: {subespecialidade})")
+            self.ui.statusbar.setStyleSheet("color: green;")
     
     def marcar_saram_com_bandeira(self, linha_alvo):
         """
