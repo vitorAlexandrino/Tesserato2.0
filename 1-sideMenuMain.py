@@ -837,7 +837,7 @@ class UI(QMainWindow):
 
             # 6. GERAÇÃO DO ALERTA (Mensagem Prática)
             msg_alerta = (
-                f"⚠️ ATENÇÃO: A saída deste militar derruba a {om_origem} para {taxa_projetada:.1%} "
+                f"⚠️ ATENÇÃO: Se esse militar for transferido, a taxa de ocupação da {om_origem} diminuirá para {taxa_projetada:.1%} "
                 f"(Meta: 70%).\n"
                 f"RESERVAS DISPONÍVEIS ABAIXO: {reservas} militares de {subespecialidade}."
             )
