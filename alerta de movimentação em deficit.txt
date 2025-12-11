@@ -1,9 +1,0 @@
-Quando selecionar um militar que, se for movimentado, vai deixar sua especificidade da OM em déficit (taxa de ocupação menor que X%), deve haver um alerta informado da situação e se terá reposição para ele dentre os militares subsequentes da lista.
-
-Sequência lógica para cumprir o requisito.
-
-1- toda vez que selecionar um militar, deve ser checado a taxa de ocupação para as características desse militar.
-2- Se a taxa de ocupação desse militar for ficar abaixo de 100%, acionar o alerta. 
-3- O Alerta deve descrever a situação (Atenção, se esse militar for movimentado, a taxa de ocupação da OM XXX (OM em que o militar está lotado) ficará abaixo de 100%, mas dentre os militares subsequentes ainda existem X militares que poderiam completar a vaga deste militar.)
-4- Filtrar os subsequentes de acordo com as características do militar selecionado (Especialidade e Subespecialidade) e taxa de ocupação maior que 100%.
-5- Se o militar selecionado for transferido, Reservar o primeiro da lista dos filtrados para a localidade que ficou em déficit.
