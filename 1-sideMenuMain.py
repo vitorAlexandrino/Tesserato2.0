@@ -21,6 +21,7 @@ from matplotlib.figure import Figure
 import numpy as np
 
 from pagina_voluntarios_cb import install as install_vol_cb
+from barra_navegacao import instalar_barra_navegacao
 
 # TODO : Ao carregar um arquivo excel (Menu >> Carregar arquivos >> Dados dos militares [e selecionar um arquivo excel compatível]) com dados já carregados, demora muito para o segundo carregamento
 
@@ -745,6 +746,12 @@ class UI(QMainWindow):
 
         # Cria a página "Voluntários C e B" e adiciona o item ao menu
         install_vol_cb(self)
+
+        # =================================================================
+        # BARRA DE NAVEGAÇÃO COM BOTÕES CHEVRON (deve ser chamada APÓS
+        # todas as páginas terem sido adicionadas ao stackedWidget)
+        # =================================================================
+        instalar_barra_navegacao(self)
 
         # 4. Define a cor do destaque (Amarelo com letra preta) usando CSS (QSS)
         # O 'outline: none' remove aquele pontilhado em volta da célula
